@@ -1,0 +1,207 @@
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <random>
+
+class FluidLatticeNeuralNetwork {
+public:
+    FluidLatticeNeuralNetwork(const std::vector<int>& layerSizes, double learningRate)
+        : layerSizes(layerSizes), learningRate(learningRate) {
+        initializeWeights();
+    }
+
+    std::vector<double> predict(const std::vector<double>& input) {
+        std::vector<double> activations = input;
+
+        for (int i = 1; i < numLayers; ++i) {
+            std::vector<double> newActivations(layerSizes[i]);
+
+            for (int j = 0; j < layerSizes[i]; ++j) {
+                double sum = 0.0;
+
+                for (int k = 0; k < layerSizes[i - 1]; ++k) {
+                    sum += activations[k] * weights[i - 1][j][k];
+                }
+
+                newActivations[j] = activationFunction(sum);
+            }
+
+            activations = newActivations;
+        }
+
+        return activations;
+    }
+
+    void train(const std::vector<std::vector<double>>& inputs,
+               const std::vector<std::vector<double>>& targets,
+               int numEpochs) {
+        for (int epoch = 0; epoch < numEpochs; ++epoch) {
+            double error = 0.0;
+
+            for (int i = 0; i < inputs.size(); ++i) {
+                std::vector<double> predicted = predict(inputs[i]);
+                std::vector<double> target = targets[i];
+
+                std::vector<double> errors(layerSizes.back());
+                for (int j = 0; j < layerSizes.back(); ++j) {
+                    errors[j] = target[j] - predicted[j];
+                }
+
+                for (int j = numLayers - 1; j > 0; --j) {
+                    std::vector<double> newErrors(layerSizes[j - 1]);
+
+                    for (int k = 0; k < layerSizes[j - 1]; ++k) {
+                        double errorSum = 0.0;
+
+                        for (int l = 0; l < layerSizes[j]; ++l) {
+                            errorSum += errors[l] * weights[j - 1][l][k];
+                        }
+
+                        newErrors[k] = errorSum;
+                    }
+
+                    errors = newErrors;
+                }
+
+                for (int j = 1; j < numLayers; ++j) {
+                    for (int k = 0; k < layerSizes[j]; ++k) {
+                        for (int l = 0; l < layerSizes[j - 1]; ++l) {
+                            weights[j - 1][k][l] += learningRate * errors[k] * activationDerivative(predicted[k]) * inputs[i][l];
+                        }
+                    }
+                }
+
+                error += calculateError(predicted, target);
+            }
+
+            std::cout << "Epoch: " << epoch << ", Error: " << error << std::endl;
+        }
+    }
+
+private:
+    int numLayers;
+    std::vector<int> layerSizes;
+    double learningRate;
+    std::vector<std::vector<std::vector<double>>> weights;
+
+    void initializeWeights() {
+        numLayers = layerSizes.size();
+        weights.resize(numLayers - 1);
+
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::normal_distribution<double> distribution(0.0, 1.0);
+
+        for (int i = 0; i < numLayers - 1; ++i) {
+            weights[i].resize(layerSizes[i + 1]);
+
+            for (int j = 0; j < layerSizes[i + 1]; ++j) {
+                weights[i][j].resize(layerSizes[i]);
+
+                for (int k = 0; k < layerSizes[i]; ++k) {
+                    weights[i][j][k] = distribution(gen);
+                }
+            }
+        }
+    }
+
+    double activationFunction(double x) {
+        // You can choose any activation function you like (e.g., sigmoid, tanh, ReLU)
+        return 1.0 / (1.0 + exp(-x));
+    }
+
+    double activationDerivative(double x) {
+        // Derivative of the activation function
+        return x * (1.0 - x);
+    }
+
+    double calculateError(const std::vector<double>& predicted, const std::vector<double>& target) {
+        double error = 0.0;
+
+        for (int i = 0; i < predicted.size(); ++i) {
+            error += pow(target[i] - predicted[i], 2);
+        }
+
+        return error / 2.0;
+    }
+};
+
+// fBm algorithm
+std::vector<double> generateFBm(int size, double H, double lacunarity, double persistence) {
+    std::vector<double> result(size);
+    double frequency = 1.0;
+    double amplitude = 1.0;
+
+    for (int i = 0; i < size; ++i) {
+        double noise = 0.0;
+        double totalAmplitude = 0.0;
+
+        for (int j = 0; j < 8; ++j) {
+            noise += amplitude * (2.0 * static_cast<double>(rand()) / RAND_MAX - 1.0);
+            totalAmplitude += amplitude;
+            amplitude *= persistence;
+            frequency *= lacunarity;
+        }
+
+        result[i] = noise / totalAmplitude;
+    }
+
+    return result;
+}
+
+int main() {
+    // Example usage
+    std::vector<int> layerSizes = {1, 4, 1};  // Input layer with 1 neuron, hidden layer with 4 neurons, output layer with 1 neuron
+    double learningRate = 0.1;
+    int numEpochs = 1000;
+
+    FluidLatticeNeuralNetwork neuralNetwork(layerSizes, learningRate);
+
+    // Generate fBm input and target data
+    int dataSize = 100;
+    double H = 0.8;           // Hurst exponent
+    double lacunarity = 2.0;  // Frequency multiplier between successive octaves
+    double persistence = 0.5; // Amplitude multiplier between successive octaves
+
+    std::vector<double> input = generateFBm(dataSize, H, lacunarity, persistence);
+    std::vector<double> target = generateFBm(dataSize, H, lacunarity, persistence);
+
+    // Normalize the input and target data to the range [0, 1]
+    double inputMin = *std::min_element(input.begin(), input.end());
+    double inputMax = *std::max_element(input.begin(), input.end());
+    double targetMin = *std::min_element(target.begin(), target.end());
+    double targetMax = *std::max_element(target.begin(), target.end());
+
+    for (int i = 0; i < dataSize; ++i) {
+        input[i] = (input[i] - inputMin) / (inputMax - inputMin);
+        target[i] = (target[i] - targetMin) / (targetMax - targetMin);
+    }
+
+    // Train the neural network
+    neuralNetwork.train({input}, {target}, numEpochs);
+
+    // Generate a new input using fBm
+    std::vector<double> newInput = generateFBm(dataSize, H, lacunarity, persistence);
+    for (int i = 0; i < dataSize; ++i) {
+        newInput[i] = (newInput[i] - inputMin) / (inputMax - inputMin);
+    }
+
+    // Predict the output for the new input
+    std::vector<double> output = neuralNetwork.predict(newInput);
+
+    // Denormalize the predicted output
+    double outputMin = *std::min_element(output.begin(), output.end());
+    double outputMax = *std::max_element(output.begin(), output.end());
+
+    for (int i = 0; i < dataSize; ++i) {
+        output[i] = output[i] * (outputMax - outputMin) + outputMin;
+    }
+
+    // Print the predicted output
+    for (int i = 0; i < dataSize; ++i) {
+        std::cout << output[i] << " ";
+    }
+    std::cout << std::endl;
+
+    return 0;
+}
