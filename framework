@@ -1,0 +1,157 @@
+ #include <iostream>
+#include <vector>
+#include <cmath>
+#include <random>
+
+class FluidLatticeNeuralNetwork {
+public:
+    FluidLatticeNeuralNetwork(const std::vector<int>& layerSizes, double learningRate)
+        : layerSizes(layerSizes), learningRate(learningRate) {
+        initializeWeights();
+    }
+
+    std::vector<double> predict(const std::vector<double>& input) {
+        std::vector<double> activations = input;
+
+        for (int i = 1; i < numLayers; ++i) {
+            std::vector<double> newActivations(layerSizes[i]);
+
+            for (int j = 0; j < layerSizes[i]; ++j) {
+                double sum = 0.0;
+
+                for (int k = 0; k < layerSizes[i - 1]; ++k) {
+                    sum += activations[k] * weights[i - 1][j][k];
+                }
+
+                newActivations[j] = activationFunction(sum);
+            }
+
+            activations = newActivations;
+        }
+
+        return activations;
+    }
+
+    void train(const std::vector<std::vector<double>>& inputs,
+               const std::vector<std::vector<double>>& targets,
+               int numEpochs) {
+        for (int epoch = 0; epoch < numEpochs; ++epoch) {
+            double error = 0.0;
+
+            for (int i = 0; i < inputs.size(); ++i) {
+                std::vector<double> predicted = predict(inputs[i]);
+                std::vector<double> target = targets[i];
+
+                std::vector<double> errors(layerSizes.back());
+                for (int j = 0; j < layerSizes.back(); ++j) {
+                    errors[j] = target[j] - predicted[j];
+                }
+
+                for (int j = numLayers - 1; j > 0; --j) {
+                    std::vector<double> newErrors(layerSizes[j - 1]);
+
+                    for (int k = 0; k < layerSizes[j - 1]; ++k) {
+                        double errorSum = 0.0;
+
+                        for (int l = 0; l < layerSizes[j]; ++l) {
+                            errorSum += errors[l] * weights[j - 1][l][k];
+                        }
+
+                        newErrors[k] = errorSum;
+                    }
+
+                    errors = newErrors;
+                }
+
+                for (int j = 1; j < numLayers; ++j) {
+                    for (int k = 0; k < layerSizes[j]; ++k) {
+                        for (int l = 0; l < layerSizes[j - 1]; ++l) {
+                            weights[j - 1][k][l] += learningRate * errors[k] * activationDerivative(predicted[k]) * inputs[i][l];
+                        }
+                    }
+                }
+
+                error += calculateError(predicted, target);
+            }
+
+            double averageError = error / inputs.size();
+            std::cout << "Epoch " << (epoch + 1) << ", Average Error: " << averageError << std::endl;
+        }
+    }
+
+private:
+    int numLayers;
+    std::vector<int> layerSizes;
+    std::vector<std::vector<std::vector<double>>> weights;
+    double learningRate;
+
+    void initializeWeights() {
+        numLayers = layerSizes.size();
+        weights.resize(numLayers - 1);
+
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<double> distribution(-1.0, 1.0);
+
+        for (int i = 0; i < numLayers - 1; ++i) {
+            weights[i].resize(layerSizes[i + 1]);
+
+            for (int j = 0; j < layerSizes[i + 1]; ++j) {
+                weights[i][j].resize(layerSizes[i]);
+
+                for (int k = 0; k < layerSizes[i]; ++k) {
+                    weights[i][j][k] = distribution(gen);
+                }
+            }
+        }
+    }
+
+    double activationFunction(double x) {
+        // You can choose any activation function you like (e.g., sigmoid, tanh, ReLU)
+        return 1.0 / (1.0 + exp(-x));
+    }
+
+    double activationDerivative(double x) {
+        // Derivative of the activation function
+        return x * (1.0 - x);
+    }
+
+    double calculateError(const std::vector<double>& predicted, const std::vector<double>& target) {
+        double error = 0.0;
+
+        for (int i = 0; i < predicted.size(); ++i) {
+            error += pow(target[i] - predicted[i], 2);
+        }
+
+        return error / 2.0;
+    }
+};
+
+int main() {
+    // Example usage
+    std::vector<int> layerSizes = {2, 4, 2};  // Input layer with 2 neurons, hidden layer with 4 neurons, output layer with 2 neurons
+    double learningRate = 0.1;
+
+    FluidLatticeNeuralNetwork neuralNetwork(layerSizes, learningRate);
+
+    std::vector<std::vector<double>> inputs = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
+    std::vector<std::vector<double>> targets = {{0, 0}, {1, 0}, {1, 0}, {0, 1}};
+
+    int numEpochs = 1000;
+    neuralNetwork.train(inputs, targets, numEpochs);
+
+    // Test the trained network
+    for (const auto& input : inputs) {
+        std::vector<double> predicted = neuralNetwork.predict(input);
+        std::cout << "Input: [" << input[0] << ", " << input[1] << "], Output: [";
+        for (int i = 0; i < predicted.size(); ++i) {
+            std::cout << predicted[i];
+            if (i < predicted.size() - 1) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << "]" << std::endl;
+    }
+
+    return 0;
+}
